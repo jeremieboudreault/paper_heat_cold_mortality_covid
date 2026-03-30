@@ -1,7 +1,7 @@
-# main_cold.R
+# main_summer.R
 
 
-# Main script for cold-related mortality burden.
+# Main script for the mortality burden during summer months.
 
 
 # Project : paper_heat_cold_mortality_covid
@@ -32,7 +32,6 @@ source("R/funs/fit_meta_stepwise_aic.R")
 # Imports ----------------------------------------------------------------------
 
 
-
 # Daily health data by HR.
 health_data <- fread("PATH TO MORTALITY DATA")
 
@@ -59,9 +58,9 @@ tbl <- data.table(
     YVAR    = rep("COUNT_TOT", n_tbl),
     TVAR    = rep("T_MEAN", n_tbl),
     RELH    = rep(TRUE, n_tbl),
-    MONTHS  = rep("c(11:12, 1:3)", n_tbl),
-    LAG     = rep(21L, n_tbl),
-    KNOTS   = rep("c(10, 50)", n_tbl),
+    MONTHS  = rep("5:9", n_tbl),
+    LAG     = rep(7L, n_tbl),
+    KNOTS   = rep("c(50, 90)", n_tbl),
     DF      = rep(4L, n_tbl)
 )
 
@@ -76,14 +75,14 @@ tbl[7L, `:=`(NAME = "Tmin (Daymet)", TVAR = "T_MIN") ]
 tbl[8L, `:=`(NAME = "Tmin (ECCC)", TVAR = "T_MIN_ECCC") ]
 tbl[9L, `:=`(NAME = "Tmax (Daymet)", TVAR = "T_MAX") ]
 tbl[10L, `:=`(NAME = "Tmax (ECCC)", TVAR = "T_MAX_ECCC") ]
-tbl[11L, `:=`(NAME = "Without RH adj.", RELH = FALSE)]
-tbl[12L, `:=`(NAME = "December–February", MONTHS = "c(12, 1:2)") ]
-tbl[13L, `:=`(NAME = "October–April", MONTHS = "c(10:12, 1:4)") ]
-tbl[14L, `:=`(NAME = "Lag 14 days", LAG = 14L) ]
-tbl[15L, `:=`(NAME = "Lag 28 days", LAG = 28L) ]
+tbl[11L, `:=`(NAME = "Without RH adj.", RELH = FALSE) ]
+tbl[12L, `:=`(NAME = "June–August", MONTHS = "6:8") ]
+tbl[13L, `:=`(NAME = "April–October", MONTHS = "4:10") ]
+tbl[14L, `:=`(NAME = "Lag 3 days", LAG = 3L) ]
+tbl[15L, `:=`(NAME = "Lag 10 days", LAG = 10L) ]
 tbl[16L, `:=`(NAME = "Knots (25, 75)", KNOTS = "c(25, 75)")]
-tbl[17L, `:=`(NAME = "Knots (10, 75)", KNOTS = "c(10, 75)")]
-tbl[18L, `:=`(NAME = "Knots (25, 50)", KNOTS = "c(25, 50)")]
+tbl[17L, `:=`(NAME = "Knots (25, 90)", KNOTS = "c(25, 90)")]
+tbl[18L, `:=`(NAME = "Knots (50, 75)", KNOTS = "c(50, 75)")]
 tbl[19L, `:=`(NAME = "Seas. adj. 3 df", DF = 3L)]
 tbl[20L, `:=`(NAME = "Seas. adj. 5 df", DF = 5L)]
 
@@ -94,20 +93,20 @@ tbl
 # Parameters -------------------------------------------------------------------
 
 
-# Loop on all parameters.
-for (tbl_i in 1:20) {
+# Loop on all parametrs.
+for (tbl_i in c(1:20)) {
 
 # Message.
 message("Running ", tbl_i, ".")
 
-# Maximum lag.
+# Maximum lag (7 days for summer, 21 days for winter)
 max_lag <- tbl[tbl_i, LAG]
 
 # Number of degrees of freedom for date variable (4 df for 5 months)
 df_date <- tbl[tbl_i, DF]
 
 # Number of knots for lag dimension.
-nk_xlag <- 3
+nk_xlag <- 2
 
 # Position of knots for main exposure.
 knots_xvar <- eval(parse(text = tbl[tbl_i, KNOTS]))/100
@@ -135,7 +134,7 @@ nsim <- 1000L
 cols_sim <- paste0("SIM", 1:nsim)
 
 # Filename.
-fname <- paste0("cold_", tbl_i, "_")
+fname <- paste0("heat_", tbl_i, "_")
 
 # Verbose.
 verbose <- FALSE
@@ -164,19 +163,12 @@ setnames(merged_data, hvar, "COUNT")
 hr_sel <- c(1:9, 11:16)
 merged_data <- merged_data[HR %in% hr_sel, ]
 
-# Compute cold threshold.
-cold_thresh <- merged_data[HR %in% hr_sel & YEAR %in% 2000:2024, .(Q = quantile(get(paste0(tvar, "0")), 0.025)), by = "HR"]
-
-# Convert weekday to factor.
+# Convert weekday and year variables to factor.
 merged_data[, WEEKDAY_F := factor(WEEKDAY, levels = 1:7)]
-
-# Update year for continuous winter.
-merged_data[MONTH %in% 1:6, YEAR := YEAR - 1]
 merged_data[, YEAR_F := factor(YEAR)]
 
-# Update DOY for winter.
-merged_data[MONTH %in% 1:6, DOY := DOY + 365]
-merged_data[YEAR %% 4 == 0L & MONTH %in% 1:6, DOY := DOY + 1L]
+# Fix <DOY> for leap years (only for summer analysis).
+merged_data[YEAR %% 4 == 0L, DOY := DOY - 1]
 
 # Create lagged matrix of tvar and relh.
 tvar_mat_l <- create_lagged_mat(tvar)
@@ -185,6 +177,9 @@ if (relh) relh_mat_l <- create_lagged_mat("RELH_MEAN")
 # Create final dataset using selected months and years only.
 data_final <- merged_data[MONTH %in% months & YEAR %in% years, ]
 set(data_final, j = tvar, value = data_final[[paste0(tvar, "0")]])
+
+# Compute heat threshold. 
+heat_thresh <- merged_data[HR %in% hr_sel & YEAR %in% 2000:2024, .(Q = quantile(get(paste0(tvar, "0")), 0.975)), by = "HR"]
 
 # Check that matrices fits with results data.
 sum(sapply(tvar_mat_l, nrow)) == nrow(data_final)
@@ -221,7 +216,7 @@ for (hr in hr_sel){
     
     # Extract temperature and control variables.
     tvar_mat <- tvar_mat_l[[hr_i]]
-    if (relh) relh_mat <- relh_mat_l[[hr_i]]
+    relh_mat <- relh_mat_l[[hr_i]]
     
     # Argument for the tvar cross-basis.
     argvar_tvar <- list(
@@ -255,7 +250,7 @@ for (hr in hr_sel){
     
     # Extract MMT and extreme temperature threshold.
     mmt <- quantile(data_hr[[tvar]], probs = q_mmt[which.min(cb_tvar_reduce$RRfit)])
-    ext <- max(mmt, cold_thresh[HR == hr, Q])
+    ext <- max(mmt, heat_thresh[HR == hr, Q])
     
     # Reduced function at MMT for plotting.
     cb_tvar_reduce <- crossreduce(
@@ -383,21 +378,7 @@ names(red_blups_mmt) <- hr_sel
 fwrite(do.call(rbind, lapply(1:length(hr_sel), function(hr_i) {
     data.table(
         HR     = hr_sel[[hr_i]],
-        MODEL  = "Winter",
-        ID     = tbl_i, 
-        NAME   = tbl[tbl_i, NAME],
-        X      = red_blups_mmt[[hr_i]]$predvar,
-        Y      = exp(red_blups_mmt[[hr_i]]$allfit),
-        Y_LOW  = exp(red_blups_mmt[[hr_i]]$alllow),
-        Y_HIGH = exp(red_blups_mmt[[hr_i]]$allhigh)
-    )
-})), paste0("out/", fname, "blups.csv"))
-
-# Exports red_blups_mmt.
-fwrite(do.call(rbind, lapply(1:length(hr_sel), function(hr_i) {
-    data.table(
-        HR     = hr_sel[[hr_i]],
-        MODEL  = "Winter",
+        MODEL  = "Summer",
         ID     = tbl_i, 
         NAME   = tbl[tbl_i, NAME],
         X      = red_blups_mmt[[hr_i]]$predvar,
@@ -436,7 +417,7 @@ data_sim <- do.call(rbind, lapply(hr_sel, function(hr) {
     
     # Extract MMT and threshold for extreme temperature
     mmt <- mmt_hr[hr_i]
-    ext <- cold_thresh[HR == hr, Q]
+    ext <- heat_thresh[HR == hr, Q]
     
     # Extract coef and vcov from the meta-regression.
     coef <- blup_meta[[hr_i]]$blup
@@ -447,18 +428,18 @@ data_sim <- do.call(rbind, lapply(hr_sel, function(hr) {
     cenvec <- do.call(onebasis, c(list(x = mmt), argvar_tvar))
     bvarcen <- scale(bvar, center = cenvec, scale = F)
     
-    # Indicators for cold days.
-    data_hr[, cold_all     := get(tvar) < mmt]
-    data_hr[, cold_mod     := get(tvar) < mmt & get(tvar) >= min(mmt, ext)]
-    data_hr[, cold_extreme := get(tvar) < min(mmt, ext)]
+    # Indicators for heat and extreme heat days.
+    data_hr[, heat_all     := get(tvar) > mmt]
+    data_hr[, heat_mod     := get(tvar) > mmt & get(tvar) <= max(mmt, ext)]
+    data_hr[, heat_extreme := get(tvar) > max(mmt, ext)]
     
     # Compute the contribution of daily values (average value).
     an_mean <- (1 - exp(-bvarcen %*% coef)) * data_hr[["COUNT"]]
     
-    # Mean AN values for cold.
-    an_coldall <- sum(an_mean[data_hr$cold_all])/nyears
-    an_coldmod <- sum(an_mean[data_hr$cold_mod])/nyears
-    an_coldext <- sum(an_mean[data_hr$cold_extreme])/nyears
+    # Mean AN values for heat and extreme heat.
+    an_heatall <- sum(an_mean[data_hr$heat_all])/nyears
+    an_heatmod <- sum(an_mean[data_hr$heat_mod])/nyears
+    an_heatext <- sum(an_mean[data_hr$heat_extreme])/nyears
     
     # Sampling coefficient from BLUP assuming mvnorm.
     set.seed(2912L)
@@ -471,7 +452,7 @@ data_sim <- do.call(rbind, lapply(hr_sel, function(hr) {
     
     # Export data.
     colnames(an_sim) <- cols_sim
-    data_sim <- cbind(data_hr[, .(HR, DATE, YEAR, cold_mod, cold_extreme, cold_all)], an_sim)
+    data_sim <- cbind(data_hr[, .(HR, DATE, YEAR, heat_mod, heat_extreme, heat_all)], an_sim)
     
     # Return data_sim.
     return(data_sim)
@@ -479,7 +460,7 @@ data_sim <- do.call(rbind, lapply(hr_sel, function(hr) {
 }))
 
 # Aggregate simulations by years.
-x_year <- do.call(rbind, lapply(c("cold_mod", "cold_extreme", "cold_all"), function(trange) {
+x_year <- do.call(rbind, lapply(c("heat_mod", "heat_extreme", "heat_all"), function(trange) {
     
     # Compute mean, lower and higher value.
     do.call(rbind, lapply(years, function(year) {
@@ -502,7 +483,7 @@ x_year <- do.call(rbind, lapply(c("cold_mod", "cold_extreme", "cold_all"), funct
 }))
 
 # Aggregate simulations by region (HR).
-x_hr <- do.call(rbind, lapply(c("cold_mod", "cold_extreme", "cold_all"), function(trange) {
+x_hr <- do.call(rbind, lapply(c("heat_mod", "heat_extreme", "heat_all"), function(trange) {
     
     # Compute mean, lower and higher value.
     do.call(rbind, lapply(hr_sel, function(hr) {
@@ -525,7 +506,7 @@ x_hr <- do.call(rbind, lapply(c("cold_mod", "cold_extreme", "cold_all"), functio
 }))
 
 # Aggregate simulations for the whole province.
-x_qc <- do.call(rbind, lapply(c("cold_mod", "cold_extreme", "cold_all"), function(trange) {
+x_qc <- do.call(rbind, lapply(c("heat_mod", "heat_extreme", "heat_all"), function(trange) {
     
     # Extract values of interest.
     val <- ul(data_sim[get(trange) == TRUE, lapply(.SD, sum), .SDcols = cols_sim])

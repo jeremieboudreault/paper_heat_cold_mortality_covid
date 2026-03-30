@@ -1,7 +1,7 @@
 # main_annual.R
 
 
-# Main script for temperature-related mortality burden.
+# Main script for the mortality burden during all summer and winter months.
 
 
 # Project : paper_heat_cold_mortality_covid
