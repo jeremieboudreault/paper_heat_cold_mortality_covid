@@ -1,7 +1,7 @@
 The heat-related and cold-related mortality burden in the context of the COVID-19 pandemic in Quebec, Canada
 ================================================================================
     
-These are the code to analyze heat and cold-related mortality presented in an upcoming paper.
+These are the scripts to analyze heat-related and cold-related mortality in the context of the COVID-19 pandemic presented in an upcoming paper.
 
 - By [Jérémie Boudreault](https://jeremieboudreault.github.io/), Sophie Calcaneo, Félix Lamothe, Éric Lavigne, Céline Campagna and Fateh Chebana
 
